@@ -2227,7 +2227,7 @@ function AutomationMessageRow({ row }: { row: Extract<TimelineRow, { kind: "mess
       {bodyMounted ? (
         // `beforematch` does not bubble, so the reveal listener sits on the hidden fold itself.
         <div ref={revealRef} hidden={!expanded}>
-          <WorkLogDetails>
+          <WorkLogDetails scrollable={!ctx.findActive}>
             <div data-thread-find-text="true">
               <UserMessageBody text={text} skills={ctx.skills} markdownCwd={ctx.markdownCwd} />
             </div>

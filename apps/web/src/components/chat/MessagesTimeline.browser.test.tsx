@@ -8,6 +8,7 @@ import "~/index.css";
 import { act, render } from "../../../test/render";
 import { MessagesTimeline, remarkThoughtPreview } from "./MessagesTimeline";
 import { parseMarkdownWithMath } from "@t3tools/shared/markdownMath";
+import { collectThreadFindRanges } from "./threadFindHighlights";
 
 const environmentQuery = vi.hoisted(() => ({
   error: "Pull request not found",
@@ -208,18 +209,24 @@ describe("MessagesTimeline automation prompts", () => {
     expect(screen.text()).toContain("Label every new issue and close duplicates.");
   });
 
-  it("opens a folded automation prompt when find selects text inside it", async () => {
+  it("reveals a find match beyond the folded automation prompt's initial viewport", async () => {
     setup();
-    await using screen = await renderTimeline(
-      [message(AUTOMATION_PROMPT, { scheduledTaskId: TASK_ID })],
-      {
-        findExpanded: true,
-        findQuery: "duplicates",
-        activeFindMatch: { entryId: "entry-message-1", runId: null, occurrence: 0 },
-      },
-    );
+    const prompt = `${"Inspect the next item.\n\n".repeat(16)}Close duplicates.`;
+    await using screen = await renderTimeline([message(prompt, { scheduledTaskId: TASK_ID })], {
+      findExpanded: true,
+      findQuery: "duplicates",
+      activeFindMatch: { entryId: "entry-message-1", runId: null, occurrence: 0 },
+    });
     await vi.waitFor(() =>
       expect(screen.button(/^Automation/).getAttribute("aria-expanded")).toBe("true"),
+    );
+    const { range } = collectThreadFindRanges(screen.container, "duplicates")[0]!;
+    const details = screen.container.querySelector("[data-thread-find-text]")!.parentElement!;
+    expect(range.getBoundingClientRect().top - details.getBoundingClientRect().top).toBeGreaterThan(
+      384,
+    );
+    expect(range.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      details.getBoundingClientRect().bottom,
     );
   });
 

@@ -131,11 +131,13 @@ export function WorkLogDetails({
   children,
   kind = "text",
   followLive = false,
+  scrollable = true,
 }: {
   children: ReactNode;
   kind?: "text" | "panel" | "media";
 
   followLive?: boolean;
+  scrollable?: boolean;
 }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const atLiveEdgeRef = useRef(true);
@@ -157,7 +159,10 @@ export function WorkLogDetails({
       className={cn(
         "cursor-auto",
         kind === "text"
-          ? "ms-7 flex max-h-96 flex-col gap-3 overflow-auto px-0.5 py-1 select-text"
+          ? cn(
+              "ms-7 flex flex-col gap-3 px-0.5 py-1 select-text",
+              scrollable && "max-h-96 overflow-auto",
+            )
           : kind === "panel"
             ? "mt-0.5 mb-1.5 pb-2"
             : "mt-1",
