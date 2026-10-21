@@ -178,7 +178,7 @@ it.effect.each([
   ["question", "thread.stop"],
   ["restart", "thread.stop"],
 ] as const)(
-  "Stop clears an orphaned follow-up only when its child is finished (%s via %s)",
+  "Stop clears an orphaned follow-up when its child is finished; its own Stop always does (%s via %s)",
   ([childState, type]) =>
     Effect.gen(function* () {
       const orchestrator = yield* Orchestrator.OrchestratorV2;
@@ -438,13 +438,16 @@ it.effect.each([
         (after.thread.pullRequests ?? []).filter((link) => link.watch !== undefined),
         type === "subagent.stop" ? 1 : 0,
       );
-      const expected = childState === "idle" || childState === "archived" ? "cancelled" : "running";
+      const expected =
+        type === "subagent.stop" || childState === "idle" || childState === "archived"
+          ? "cancelled"
+          : "running";
       assert.equal(after.subagents.find((task) => task.id === taskId)?.status, expected);
       assert.equal(after.nodes.find((node) => node.id === taskId)?.status, expected);
       assert.equal(after.turnItems.find((item) => item.id === itemId)?.status, expected);
       assert.equal(
         after.subagents.find((task) => task.id === taskId)?.completionDelivery?.state,
-        type === "subagent.stop" && expected === "running" ? undefined : "disposed",
+        "disposed",
       );
       assert.equal(
         after.subagents.find((task) => task.id === original.id)?.result,
@@ -468,6 +471,28 @@ it.effect.each([
         assert.equal(repeated.subagents.find((task) => task.id === taskId)?.status, "cancelled");
         assert.deepEqual(repeated.messages, after.messages);
         assert.deepEqual(repeated.contextTransfers, after.contextTransfers);
+        if (type === "subagent.stop") {
+          // A client that missed the cancel, such as one resumed from an older cache, still
+          // shows the task as running. Its Stop gets the ended task back.
+          const eventStore = yield* EventStore.EventStoreV2;
+          const afterSequence = yield* eventStore.latestSequence({ threadId: parentThreadId });
+          yield* orchestrator.dispatch({
+            ...stop,
+            commandId: CommandId.make(`stop-orphan-stale-client:${childState}`),
+            type,
+            runId: original.runId!,
+            subagentId: taskId,
+          });
+          const resent = yield* eventStore
+            .read({ threadId: parentThreadId, afterSequence })
+            .pipe(Stream.runCollect);
+          assert.deepEqual(
+            resent.flatMap(({ event }) =>
+              event.type === "subagent.updated" ? [event.payload.status] : [],
+            ),
+            ["cancelled"],
+          );
+        }
       }
     }).pipe(Effect.provide(layerTest)),
 );
