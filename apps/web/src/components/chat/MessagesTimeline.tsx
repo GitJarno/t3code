@@ -2182,28 +2182,51 @@ function AutomationMessageRow({ row }: { row: Extract<TimelineRow, { kind: "mess
   const taskTitle = tasksQuery.data?.tasks.find((task) => task.id === scheduledTaskId)?.title;
   const summary = taskTitle ?? text.trim().split(/\r?\n/, 1)[0] ?? "";
 
+  const revertTurnCount = row.revertTurnCount;
+  const promptLink = promptLinkFor(text);
+  // Find reads the DOM, so a folded prompt stays mounted but hidden while find is open.
+  const bodyMounted = expanded || ctx.findActive;
+
   return (
     <WorkLogBlock>
-      <div ref={revealRef} data-user-message-attribution="automation">
-        <WorkLogButton
-          aria-expanded={expanded}
-          data-scroll-anchor-ignore
-          onClick={() => setExpanded((value) => !value)}
-          icon={<CalendarClockIcon className="size-4 shrink-0 stroke-2 text-icon-muted" />}
-          label={
-            <span className="flex min-w-0 gap-1.5">
-              <span className="shrink-0">Automation</span>
-              <span className="min-w-0 truncate text-foreground">{summary}</span>
-            </span>
-          }
-          trailing={
-            <TimelineRowTimestamp
-              createdAt={row.message.createdAt}
-              timestampFormat={ctx.timestampFormat}
-            />
-          }
-        />
-        {expanded ? (
+      <div
+        className="group flex min-w-0 items-center gap-1"
+        data-user-message-attribution="automation"
+      >
+        <div className="min-w-0 flex-1">
+          <WorkLogButton
+            aria-expanded={expanded}
+            data-scroll-anchor-ignore
+            onClick={() => setExpanded((value) => !value)}
+            icon={<CalendarClockIcon className="size-4 shrink-0 stroke-2 text-icon-muted" />}
+            label={
+              <span className="flex min-w-0 gap-1.5">
+                <span className="shrink-0">Automation</span>
+                <span className="min-w-0 truncate text-foreground">{summary}</span>
+              </span>
+            }
+            trailing={
+              <TimelineRowTimestamp
+                createdAt={row.message.createdAt}
+                timestampFormat={ctx.timestampFormat}
+              />
+            }
+          />
+        </div>
+        {row.message.inputIntent === "steer" ||
+        row.message.inputIntent === "promoted_queued_to_steer" ? (
+          <UserMessageIntentMarker intent={row.message.inputIntent} />
+        ) : null}
+        <UserMessageProjectedStatus row={row} />
+        {typeof revertTurnCount === "number" && (
+          <div className="opacity-0 transition-opacity duration-200 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover:opacity-100">
+            <RevertUserMessageButton turnCount={revertTurnCount} messageId={row.message.id} />
+          </div>
+        )}
+      </div>
+      {bodyMounted ? (
+        // `beforematch` does not bubble, so the reveal listener sits on the hidden fold itself.
+        <div ref={revealRef} hidden={!expanded}>
           <WorkLogDetails>
             <div data-thread-find-text="true">
               <UserMessageBody text={text} skills={ctx.skills} markdownCwd={ctx.markdownCwd} />
@@ -2219,11 +2242,37 @@ function AutomationMessageRow({ row }: { row: Extract<TimelineRow, { kind: "mess
                 </Link>
               ) : null}
               <MessageCopyButton text={text} variant="ghost" />
+              {promptLink !== null && (
+                <MessageCopyButton
+                  text={promptLink}
+                  label="Copy prompt link"
+                  icon={LinkIconNode}
+                  variant="ghost"
+                />
+              )}
             </div>
           </WorkLogDetails>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
     </WorkLogBlock>
+  );
+}
+
+function UserMessageProjectedStatus({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
+  const status = row.projectedItem?.item.status;
+  if (
+    status === undefined ||
+    status === "completed" ||
+    status === "pending" ||
+    status === "waiting"
+  )
+    return null;
+  return (
+    <div className="me-1 flex items-center gap-1.5">
+      <span className="rounded-full border border-destructive/25 bg-destructive/8 px-1.5 py-0.5 text-3xs font-medium text-destructive">
+        {status}
+      </span>
+    </div>
   );
 }
 
@@ -2501,16 +2550,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
           />
         </div>
       </div>
-      {row.projectedItem &&
-      row.projectedItem.item.status !== "completed" &&
-      row.projectedItem.item.status !== "pending" &&
-      row.projectedItem.item.status !== "waiting" ? (
-        <div className="me-1 flex items-center gap-1.5">
-          <span className="rounded-full border border-destructive/25 bg-destructive/8 px-1.5 py-0.5 text-3xs font-medium text-destructive">
-            {row.projectedItem.item.status}
-          </span>
-        </div>
-      ) : null}
+      <UserMessageProjectedStatus row={row} />
       <div className="flex w-full max-w-[80%] items-center justify-end pe-1 text-xs tabular-nums opacity-0 transition-opacity duration-200 pointer-coarse:opacity-100 focus-within:opacity-100 group-hover:opacity-100">
         <div className="flex shrink-0 items-center gap-2">
           <Tooltip>
